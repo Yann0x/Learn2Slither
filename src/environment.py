@@ -1,16 +1,33 @@
 import random as rd
 import pygame as pg
+from collections import deque
 from display import draw
+from interpreter import get_state
+
+
+DIRS: dict[str, tuple[int, int]] = {
+    "UP": (-1, 0),
+    "DOWN": (1, 0),
+    "LEFT": (0, -1),
+    "RIGHT": (0, 1),
+}
+REWARDS: dict[str, int | float] = {
+    "G": 10,
+    "R": -10,
+    "W": -100,
+    "0": -0.1
+}
 
 
 class Board:
     def __init__(self):
         self.grid: list[list[str]] = [["0"] * 12 for _ in range(12)]
-        self.snake: list[int] = []
+        self.snake: deque[tuple[int, int]] = deque()
         self.length = 3
         self.place_snake()
-        for i in range(3):
-            self.generate_apple(i)
+        self.generate_apple(1)
+        self.generate_apple(1)
+        self.generate_apple(-1)
         self.place_walls()
 
     def generate_apple(self, type: int):
@@ -18,7 +35,7 @@ class Board:
             x = rd.randint(1, 10)
             y = rd.randint(1, 10)
             if self.grid[x][y] == "0":
-                self.grid[x][y] = "R" if type == 1 else "G"
+                self.grid[x][y] = "G" if type == 1 else "R"
                 break
 
     def place_walls(self):
@@ -44,7 +61,7 @@ class Board:
         for i, label in enumerate(["H", "S", "S"]):
             self.grid[x + dx * i][y + dy * i] = label
             if i != 0:
-                self.snake.append((x + dx * i) * 100 + (y + dy * i))
+                self.snake.append((x + dx * i, y + dy * i))
 
         self.snake_x = x
         self.snake_y = y
@@ -52,54 +69,48 @@ class Board:
     def move_snake(self, x: int, y: int, length: int):
         if length == -1 and self.length == 1:
             return 1
-        oldelem = self.snake_x * 100 + self.snake_y
         self.grid[x][y] = "H"
-        i = 0
-        for elem in self.snake:
-            self.grid[oldelem // 100][oldelem % 100] = "S"
-            tmp = oldelem
-            oldelem = elem
-            self.snake[i] = tmp
-            i += 1
-        self.grid[oldelem // 100][oldelem % 100] = "0"
+        self.grid[self.snake_x][self.snake_y] = "S"
+        self.snake.appendleft((self.snake_x, self.snake_y))
         if length == 1:
-            self.grid[oldelem // 100][oldelem % 100] = "S"
             self.length += 1
-            self.snake.append(oldelem)
+            self.generate_apple(1)
         elif length == -1:
-            pos = self.snake.pop()
-            self.grid[pos // 100][pos % 100] = "0"
+            tx, ty = self.snake.pop()
+            self.grid[tx][ty] = "0"
+            tx, ty = self.snake.pop()
+            self.grid[tx][ty] = "0"
             self.length -= 1
-        if length != 0:
-            self.generate_apple(length * -1)
+            self.generate_apple(-1)
+        else:
+            tx, ty = self.snake.pop()
+            self.grid[tx][ty] = "0"
         self.snake_x = x
         self.snake_y = y
         return 0
 
     def step(self, dir: str):
-        if dir == "UP":
-            newpos_x = self.snake_x - 1
-            newpos_y = self.snake_y
-        elif dir == "DOWN":
-            newpos_x = self.snake_x + 1
-            newpos_y = self.snake_y
-        elif dir == "LEFT":
-            newpos_x = self.snake_x
-            newpos_y = self.snake_y - 1
-        else:
-            newpos_x = self.snake_x
-            newpos_y = self.snake_y + 1
-        if self.grid[newpos_x][newpos_y] == "W":
-            return 1
-        elif self.grid[newpos_x][newpos_y] == "G":
-            self.move_snake(newpos_x, newpos_y, 1)
-        elif self.grid[newpos_x][newpos_y] == "R":
-            return self.move_snake(newpos_x, newpos_y, -1)
-        elif self.grid[newpos_x][newpos_y] == "S":
-            return 1
-        else:
-            self.move_snake(newpos_x, newpos_y, 0)
-        return 0
+        dx, dy = DIRS[dir]
+        nx, ny = self.snake_x + dx, self.snake_y + dy
+        cell = self.grid[nx][ny]
+        if self.length > 1 and (nx, ny) == self.snake[0]:
+            return 0
+        elif cell in ("W", "S"):
+            return REWARDS["W"]
+        print(dir)
+        reward = REWARDS[cell]
+        self.move_snake(nx, ny, {"G": 1, "R": -1}.get(cell, 0))
+        return reward
+
+
+def print_state(state):
+    up, down, left, right = state
+    pad = " " * len(left)
+    for cell in reversed(up):
+        print(pad + cell)
+    print("".join(reversed(left)) + "H" + "".join(right))
+    for cell in down:
+        print(pad + cell)
 
 
 snake = Board()
@@ -108,21 +119,26 @@ pg.init()
 screen = pg.display.set_mode((600, 600))
 pg.event.clear()
 running = True
+score = 0
+reward = 0
+draw(screen, snake.grid)
+print_state(get_state(snake))
 while running:
     for event in pg.event.get():
         if event.type == pg.QUIT:
             running = False
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_UP:
-                if snake.step("UP"):
-                    exit("you died!")
+                reward = snake.step("UP")
             elif event.key == pg.K_DOWN:
-                if snake.step("DOWN"):
-                    exit("you died!")
+                reward = snake.step("DOWN")
             elif event.key == pg.K_LEFT:
-                if snake.step("LEFT"):
-                    exit("you died!")
+                reward = snake.step("LEFT")
             elif event.key == pg.K_RIGHT:
-                if snake.step("RIGHT"):
-                    exit("you died!")
+                reward = snake.step("RIGHT")
+            score += reward
+            print(f"score: {score}")
+            if reward == -100:
+                exit("You died!")
             draw(screen, snake.grid)
+            print_state(get_state(snake))
