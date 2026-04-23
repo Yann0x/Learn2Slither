@@ -1,8 +1,5 @@
 import random as rd
-import pygame as pg
 from collections import deque
-from display import draw
-from interpreter import get_state
 
 
 DIRS: dict[str, tuple[int, int]] = {
@@ -11,26 +8,24 @@ DIRS: dict[str, tuple[int, int]] = {
     "LEFT": (0, -1),
     "RIGHT": (0, 1),
 }
-REWARDS: dict[str, int | float] = {
-    "G": 10,
-    "R": -10,
-    "W": -100,
-    "0": -0.1
-}
+REWARDS: dict[str, int | float] = {"G": 10, "R": -10, "W": -100, "0": 0}
 
 
 class Board:
+    __slots__ = ("grid", "snake", "length", "direction", "snake_x", "snake_y")
+
     def __init__(self):
         self.grid: list[list[str]] = [["0"] * 12 for _ in range(12)]
         self.snake: deque[tuple[int, int]] = deque()
         self.length = 3
+        self.direction = ""
         self.place_snake()
         self.generate_apple(1)
         self.generate_apple(1)
         self.generate_apple(-1)
         self.place_walls()
 
-    def generate_apple(self, type: int):
+    def generate_apple(self, type: int) -> None:
         while True:
             x = rd.randint(1, 10)
             y = rd.randint(1, 10)
@@ -38,35 +33,30 @@ class Board:
                 self.grid[x][y] = "G" if type == 1 else "R"
                 break
 
-    def place_walls(self):
+    def place_walls(self) -> None:
         self.grid[0] = ["W"] * 12
         self.grid[11] = ["W"] * 12
         for row in self.grid:
             row[0] = "W"
             row[11] = "W"
 
-    def place_snake(self):
+    def place_snake(self) -> None:
         x = rd.randint(1, 10)
         y = rd.randint(1, 10)
 
-        if y > 2:
-            dx, dy = 0, -1
-        elif x > 2:
-            dx, dy = -1, 0
-        elif y < 9:
-            dx, dy = 0, 1
-        else:
-            dx, dy = 1, 0
+        dirs = [("LEFT", 0, -1), ("UP", -1, 0), ("RIGHT", 0, 1), ("DOWN", 1, 0)]
+        conds = [y > 2, x > 2, y < 9, True]
+        self.direction, dx, dy = next(d for d, c in zip(dirs, conds) if c)
 
         for i, label in enumerate(["H", "S", "S"]):
             self.grid[x + dx * i][y + dy * i] = label
-            if i != 0:
+            if i:
                 self.snake.append((x + dx * i, y + dy * i))
 
         self.snake_x = x
         self.snake_y = y
 
-    def move_snake(self, x: int, y: int, length: int):
+    def move_snake(self, x: int, y: int, length: int) -> int:
         if length == -1 and self.length == 1:
             return 1
         self.grid[x][y] = "H"
@@ -89,56 +79,13 @@ class Board:
         self.snake_y = y
         return 0
 
-    def step(self, dir: str):
+    def step(self, dir: str) -> int | float:
         dx, dy = DIRS[dir]
         nx, ny = self.snake_x + dx, self.snake_y + dy
         cell = self.grid[nx][ny]
-        if self.length > 1 and (nx, ny) == self.snake[0]:
-            return 0
-        elif cell in ("W", "S"):
+        if cell in ("W", "S"):
             return REWARDS["W"]
-        print(dir)
-        reward = REWARDS[cell]
+        self.direction = dir
+        reward: int | float = REWARDS[cell] + 0.01 * self.length
         self.move_snake(nx, ny, {"G": 1, "R": -1}.get(cell, 0))
         return reward
-
-
-def print_state(state):
-    up, down, left, right = state
-    pad = " " * len(left)
-    for cell in reversed(up):
-        print(pad + cell)
-    print("".join(reversed(left)) + "H" + "".join(right))
-    for cell in down:
-        print(pad + cell)
-
-
-snake = Board()
-
-pg.init()
-screen = pg.display.set_mode((600, 600))
-pg.event.clear()
-running = True
-score = 0
-reward = 0
-draw(screen, snake.grid)
-print_state(get_state(snake))
-while running:
-    for event in pg.event.get():
-        if event.type == pg.QUIT:
-            running = False
-        if event.type == pg.KEYDOWN:
-            if event.key == pg.K_UP:
-                reward = snake.step("UP")
-            elif event.key == pg.K_DOWN:
-                reward = snake.step("DOWN")
-            elif event.key == pg.K_LEFT:
-                reward = snake.step("LEFT")
-            elif event.key == pg.K_RIGHT:
-                reward = snake.step("RIGHT")
-            score += reward
-            print(f"score: {score}")
-            if reward == -100:
-                exit("You died!")
-            draw(screen, snake.grid)
-            print_state(get_state(snake))

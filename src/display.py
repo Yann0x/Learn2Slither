@@ -1,7 +1,8 @@
 import pygame as pg
-CELL = 50  # taille d'une cellule en pixels
 
-COLORS = {
+CELL: int = 50
+
+COLORS: dict[str, tuple[int, int, int]] = {
     "0": (200, 200, 200),
     "W": (50, 50, 50),
     "H": (0, 0, 255),
@@ -11,7 +12,7 @@ COLORS = {
 }
 
 
-def draw(screen, grid):
+def draw(screen: pg.Surface, grid: list[list[str]]) -> None:
     for x, row in enumerate(grid):
         for y, cell in enumerate(row):
             color = COLORS.get(cell, (0, 0, 0))
