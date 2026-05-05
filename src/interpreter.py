@@ -1,10 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+import numpy as np
 
 if TYPE_CHECKING:
     from environment import Board
 
 State = tuple[tuple[str, ...], ...]
+CELL_TO_IDX = {'0': 0, 'W': 1, 'S': 2, 'G': 3, 'R': 4}
 
 
 def get_state(board: Board) -> State:
@@ -31,3 +33,15 @@ def print_state(state: State) -> None:
     print("".join(reversed(left)) + "H" + "".join(right))
     for cell in down:
         print(pad + cell)
+
+
+def encode_state(state: State) -> np.ndarray:
+    result: list[int] = []
+    for ray in state:
+        ray = ray[:10]
+        ray = ray + ('W',) * (10 - len(ray))
+        for elem in ray:
+            onehot = [0] * 5
+            onehot[CELL_TO_IDX[elem]] = 1
+            result.extend(onehot)
+    return np.array(result, dtype=np.float32)
